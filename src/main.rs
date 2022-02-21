@@ -1,12 +1,12 @@
-use std::fs;
 use array_init::array_init;
 use rayon::prelude::*;
+use std::fs;
 
 #[derive(PartialEq, Eq)]
 enum Info {
     Black,
     Yellow,
-    Green
+    Green,
 }
 
 impl Info {
@@ -15,7 +15,7 @@ impl Info {
             'x' | 'b' => Info::Black,
             'g' => Info::Green,
             'y' => Info::Yellow,
-            c => panic!("Info::from_u8: {}", c)
+            c => panic!("Info::from_u8: {}", c),
         }
     }
 }
@@ -26,7 +26,9 @@ const A: u8 = 'a' as u8;
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 enum LetterStatus {
-    Yes, No, Unknown
+    Yes,
+    No,
+    Unknown,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -37,7 +39,7 @@ impl LettersContained {
     fn possibly_contains(&self, x: u8) -> bool {
         match self.0[u8_to_letter_index(x)] {
             LetterStatus::No => false,
-            LetterStatus::Unknown | LetterStatus::Yes => true
+            LetterStatus::Unknown | LetterStatus::Yes => true,
         }
     }
 
@@ -56,7 +58,7 @@ impl LettersContained {
 struct InfoState {
     // The non-alphabetic code point 0 is used for unknown spots.
     mask: [u8; 5],
-    letters: LettersContained
+    letters: LettersContained,
 }
 
 #[inline(always)]
@@ -68,7 +70,7 @@ fn clue(guess: Word, answer: Word) -> Clue {
     array_init(|i| {
         if guess[i] == answer[i] {
             Info::Green
-        } else if answer.contains(& guess[i]) {
+        } else if answer.contains(&guess[i]) {
             Info::Yellow
         } else {
             Info::Black
@@ -81,7 +83,7 @@ impl InfoState {
         let mask = &self.mask;
         for i in 0..5 {
             if mask[i] == 0 {
-                if ! self.letters.possibly_contains(w[i]) {
+                if !self.letters.possibly_contains(w[i]) {
                     return false;
                 }
             } else {
@@ -105,19 +107,16 @@ impl InfoState {
                 }
             }
         });
-        
+
         let mut letters = self.letters;
         for i in 0..5 {
             match clue[i] {
                 Info::Green | Info::Yellow => letters.mark_contains(guess[i]),
-                Info::Black => letters.mark_not_contains(guess[i])
+                Info::Black => letters.mark_not_contains(guess[i]),
             }
         }
 
-        InfoState {
-            letters,
-            mask
-        }
+        InfoState { letters, mask }
     }
 
     fn update_from_answer(&self, guess: &Word, answer: &Word) -> Self {
@@ -125,7 +124,11 @@ impl InfoState {
         // Set to true all chars in the guess that are also in the answer
         for i in 0..5 {
             let c = guess[i];
-            let answer_has_c = c == answer[0] || c == answer[1] || c == answer[2] || c == answer[3] || c == answer[4];
+            let answer_has_c = c == answer[0]
+                || c == answer[1]
+                || c == answer[2]
+                || c == answer[3]
+                || c == answer[4];
             if answer_has_c {
                 letters.mark_contains(c)
             } else {
@@ -145,11 +148,9 @@ impl InfoState {
                         0
                     }
                 }
-            })
+            }),
         }
     }
-
-
 
     fn new() -> Self {
         InfoState {
@@ -162,13 +163,28 @@ impl InfoState {
 type Word = [u8; 5];
 
 // Given a guess and the actual hidden answer, how many words would be eliminated
-fn remaining_possibilities(info: &InfoState, guess: &Word, actual_answer: &Word, possible_answers: &Vec<Word>) -> usize {
+fn remaining_possibilities(
+    info: &InfoState,
+    guess: &Word,
+    actual_answer: &Word,
+    possible_answers: &Vec<Word>,
+) -> usize {
     let info = info.update_from_answer(guess, actual_answer);
-    possible_answers.par_iter().filter(|a| info.consistent(a)).count()
+    possible_answers
+        .par_iter()
+        .filter(|a| info.consistent(a))
+        .count()
 }
 
-fn unnormalized_expected_remaining_possibilities(info: &InfoState, guess: &Word, possible_answers: &Vec<Word>) -> usize {
-    possible_answers.par_iter().map(|a| remaining_possibilities(info, guess, a, possible_answers)).sum()
+fn unnormalized_expected_remaining_possibilities(
+    info: &InfoState,
+    guess: &Word,
+    possible_answers: &Vec<Word>,
+) -> usize {
+    possible_answers
+        .par_iter()
+        .map(|a| remaining_possibilities(info, guess, a, possible_answers))
+        .sum()
 }
 
 fn main() {
@@ -198,7 +214,7 @@ fn main() {
 
     fn read_clue() -> Clue {
         let mut line = String::new();
-        std::io::stdin().read_line(&mut line).unwrap(); // including '\n'    
+        std::io::stdin().read_line(&mut line).unwrap(); // including '\n'
         let line = line.as_bytes();
         array_init(|i| Info::from_u8(line[i]))
     };
@@ -207,20 +223,27 @@ fn main() {
     loop {
         let clue = read_clue();
         info = info.update(last_guess, clue);
-        possible_answers = possible_answers.par_iter().filter(|a| info.consistent(a)).map(|a| *a).collect();
+        possible_answers = possible_answers
+            .par_iter()
+            .filter(|a| info.consistent(a))
+            .map(|a| *a)
+            .collect();
 
         // find the word which yields the largest reduction in the number of consistent words
 
-        let scored_guesses: Vec<(Word, usize)> = possible_answers.iter().map(|guess| {
-            let score = unnormalized_expected_remaining_possibilities(&info, guess, &possible_answers);
-            println!("score {} = {}", std::str::from_utf8(guess).unwrap(), score);
-            (*guess, score)
-        }).collect();
+        let scored_guesses: Vec<(Word, usize)> = possible_answers
+            .iter()
+            .map(|guess| {
+                let score =
+                    unnormalized_expected_remaining_possibilities(&info, guess, &possible_answers);
+                println!("score {} = {}", std::str::from_utf8(guess).unwrap(), score);
+                (*guess, score)
+            })
+            .collect();
 
         let next_guess = scored_guesses.par_iter().min_by_key(|(_, s)| *s).unwrap().0;
-        
+
         println!("guess: {}", std::str::from_utf8(&next_guess).unwrap());
         last_guess = next_guess;
-
     }
 }
