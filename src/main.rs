@@ -2,6 +2,7 @@ use array_init::array_init;
 use rayon::prelude::*;
 use std::fs;
 
+/// A clue block
 #[derive(PartialEq, Eq)]
 enum Info {
     Black,
@@ -10,6 +11,7 @@ enum Info {
 }
 
 impl Info {
+    /// Decode a clue block from a character from stdin.
     fn from_u8(c: u8) -> Info {
         match c as char {
             'x' | 'b' => Info::Black,
@@ -20,6 +22,7 @@ impl Info {
     }
 }
 
+/// A clue consists of 5 pieces of info.
 type Clue = [Info; 5];
 
 const A: u8 = 'a' as u8;
@@ -31,10 +34,14 @@ enum LetterStatus {
     Unknown,
 }
 
+/// The state of our knowledge about each letter.
+/// Either it's definitely in the word, definitely not in the word,
+/// or it's not yet known which.
 #[derive(PartialEq, Eq, Clone, Copy)]
 struct LettersContained([LetterStatus; 26]);
 
 impl LettersContained {
+    /// Check whether a letter is potentially in the word.
     #[inline(always)]
     fn possibly_contains(&self, x: u8) -> bool {
         match self.0[u8_to_letter_index(x)] {
@@ -54,10 +61,13 @@ impl LettersContained {
     }
 }
 
+/// The state of our knowledge about the answer.
 #[derive(PartialEq, Eq)]
 struct InfoState {
-    // The non-alphabetic code point 0 is used for unknown spots.
+    /// The letters that we know for sure.
+    /// The non-alphabetic code point 0 is used for unknown spots.
     mask: [u8; 5],
+    /// The set of letters that we know appear in the answer.
     letters: LettersContained,
 }
 
@@ -66,19 +76,9 @@ fn u8_to_letter_index(x: u8) -> usize {
     (x - A) as usize
 }
 
-fn clue(guess: Word, answer: Word) -> Clue {
-    array_init(|i| {
-        if guess[i] == answer[i] {
-            Info::Green
-        } else if answer.contains(&guess[i]) {
-            Info::Yellow
-        } else {
-            Info::Black
-        }
-    })
-}
-
 impl InfoState {
+    /// Check whether a word is a possible answer given the current
+    /// state of our information.
     fn consistent(&self, w: &Word) -> bool {
         let mask = &self.mask;
         for i in 0..5 {
@@ -95,6 +95,8 @@ impl InfoState {
         return true;
     }
 
+    /// Update the state of our knowledge given the guess we made
+    /// and the clue that we were given.
     fn update(&self, guess: Word, clue: Clue) -> Self {
         let mask = array_init(|i| {
             if self.mask[i] != 0 {
@@ -119,6 +121,8 @@ impl InfoState {
         InfoState { letters, mask }
     }
 
+    /// Update the state of our knowledge given the guess we made and the
+    /// actual answer.
     fn update_from_answer(&self, guess: &Word, answer: &Word) -> Self {
         let mut letters = self.letters;
         // Set to true all chars in the guess that are also in the answer
@@ -160,9 +164,11 @@ impl InfoState {
     }
 }
 
+/// A word is 5 bytes
 type Word = [u8; 5];
 
-// Given a guess and the actual hidden answer, how many words would be eliminated
+/// Given a guess and the actual hidden answer, how many words
+/// would remain after the corresponding clue is given
 fn remaining_possibilities(
     info: &InfoState,
     guess: &Word,
@@ -176,6 +182,13 @@ fn remaining_possibilities(
         .count()
 }
 
+/// Assuming a uniform distribution over the set of possible_answers,
+/// compute the expected number of remaining possibilities for a given
+/// guess, times the total number of possible answers.
+///
+/// It's easier to compute without dividing by the number of possible
+/// answers. Doing so would yield the actual expected number, but it's
+/// not necssary since we use this as a "score" of how bad a guess is.
 fn unnormalized_expected_remaining_possibilities(
     info: &InfoState,
     guess: &Word,
@@ -206,10 +219,6 @@ fn main() {
     let mut info = InfoState::new();
     let mut possible_answers = words.clone();
 
-    // let answer = words[5000];
-
-    // println!("The answer is {}", std::str::from_utf8(&answer).unwrap());
-
     let best_initial_guess = "lares";
 
     fn read_clue() -> Clue {
@@ -217,7 +226,7 @@ fn main() {
         std::io::stdin().read_line(&mut line).unwrap(); // including '\n'
         let line = line.as_bytes();
         array_init(|i| Info::from_u8(line[i]))
-    };
+    }
 
     let mut last_guess: Word = array_init(|i| best_initial_guess.as_bytes()[i]);
     loop {
@@ -246,4 +255,16 @@ fn main() {
         println!("guess: {}", std::str::from_utf8(&next_guess).unwrap());
         last_guess = next_guess;
     }
+}
+
+fn clue(guess: Word, answer: Word) -> Clue {
+    array_init(|i| {
+        if guess[i] == answer[i] {
+            Info::Green
+        } else if answer.contains(&guess[i]) {
+            Info::Yellow
+        } else {
+            Info::Black
+        }
+    })
 }
